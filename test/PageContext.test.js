@@ -3,18 +3,22 @@
  */
 
 import { expect } from "chai";
-// import createPageContext from '../src/smartface/pageContext';
+import createPageContext, {pageContextReducer} from '../src/smartface/pageContext';
+import Context from "../src/core/Context";
+import Actor from "../src/core/Actor";
+import MockComponent from "./mock/Component";
 
 // import {findClassNames} from "../src/styler";
 // const styler = require("../src/styler").styler;
-// const resetStylerCache = require("../src/styler").resetStylerCache;
+// const resetStylerCache = require("../src/styler").faresetStylerCache;
 // const componentStyler = require("../src/styler").componentStyler;
 
 describe("Page Context", function() {
-  /*let pageContext;
+  let pageContext;
   let page;
   let component1;
   let component2;
+  let context;
   
   beforeEach(function() {
     component1 = {};
@@ -26,15 +30,23 @@ describe("Page Context", function() {
         component2
       }
     };
+    
     pageContext = createPageContext(page, "page");
   });
   
   it("should merge nested objects", () => {
     let style = {};
-    let context = pageContext(style);
-  });*/
+  });
+  
+  if("should add new child components", () => {
+    let context = new Context(null, pageContextReducer);
+    var rootComp = new MockComponent();
+    var actor = Context.createActor(Actor, "root", rootComp);
+    context.add(actor);
+  });
 
   it("should push new classnames", function() {
+    
     /*let actor  = makeStylable({component: {}, classNames:".test"});
     actor.isDirty = false;
     actor.pushClassNames(".test2");

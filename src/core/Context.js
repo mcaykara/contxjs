@@ -1,128 +1,191 @@
 import { INIT_CONTEXT_ACTION_TYPE } from "./constants";
 import raiseErrorMaybe from "./util/raiseErrorMaybe";
 
-export default class Context {
-
-  constructor(actors, reducer, initialState = {}, hookFactory = null) {
-    this._hookFactory = hookFactory;
-    this.actors = {
-      collection: {},
-      $$map: [],
+export function createActorCollection(actors=null) {
+  const _actors = actors 
+    || {
+      collection: [],
       $$idMap: {},
       $$nameMap: {}
-    };
-    this.state = Object.assign({}, initialState);
-    this._reducer = reducer;
-    actors && this.setActors(Object.assign({}, actors));
-    this.dispatch({
-      type: INIT_CONTEXT_ACTION_TYPE
-    });
-  }
+    }
+  
+  class ActorCollection {
+    constructor(){
+    }
+    
+    clone(){
+      return createActorCollection({
+        collection: _actors.collection.slice(),
+        $$idMap: Object.assign({}, _actors.$$idMap),
+        $$nameMap: Object.assign({}, _actors.$$nameMap)
+      });
+    }
+    
+    map(fn) {
+      return _actors.collection.map(fn);
+    }
 
+    find(instance) {
+      return _actors.collection[this._actors.$$idMap[instance]];
+    }
+    
+    add(actor) {
+      _actors.$$idMap[actor.getInstanceID()] = this._actors.collection.length;
+      _actors.$$nameMap[actor.getName()] = this._actors.collection.length;
+      _actors.collection.push(actor);
+    }
+    
+    removeChildren(instance) {
+      this._actors.collection.forEach(nm => {
+        if (nm.getName().indexOf(instance + "_") === 0) {
+          this.remmove(instance);
+        }
+      });
+    }
+
+    remove(instance) {
+      // this.removeChildren(instance);
+      const index = this._actors.$$idMap[instance];
+
+      if (index >= 0) {
+        const actor = this._actors.collection[index];
+        delete this._actors.$$nameMap[actor.getName()];
+        delete this._actors.$$idMap[actor.getInstanceID()];
+        this._actors.collection.splice(index, 1);
+        actor.componentDidLeave();
+        actor.dispose();
+        delete this.actors.collection[nm];
+      }
+    }
+  }
+  
+  return new ActorCollection;
+}
+
+/**
+ * Context Container Impl
+ * 
+ * @class
+ *
+ */
+export default class Context {
+  
+  /**
+   * @constructor
+   * @param {{collection: Array<Actor>, $$map: Array<String>, $$idMap: object, $$nameMap: object}} actors
+   * @param {function} reducers
+   * @param {object} initialState
+   * @param {function} hookFactory
+   */
+  constructor(actors, reducer, initialState = {}, hookFactory = null) {
+    this._hookFactory = hookFactory || (() => null);
+    this._actors = actors || { collection: [], $$map: [], $$idMap: {}, $$nameMap: {} };
+    this._state = Object.assign({}, initialState);
+    this._reducer = reducer;
+
+    actors && this.setActors(Object.assign({}, actors));
+    this.dispatch({ type: INIT_CONTEXT_ACTION_TYPE });
+  }
+  
   getReducer() {
     return this._reducer;
   }
 
   setActors(actors) {
-    Object.keys(actors).forEach(name => {
-      this.add(actors[name], name);
-    });
+    Object.keys(actors)
+      .forEach((name) => {
+        this.add(actors[name], name);
+      });
+
     this.propagateAll();
   }
 
-  reduce(fn, acc = {}) {
-    return this.actors.$$map.reduce((acc, name, index) => {
-      return fn(acc, this.actors.collection[name], name, index);
-    }, acc);
-  }
+  // this.reduce = (fn, acc = {}) => {
+  //   return this._actors.collection.reduce((acc, name, index) => {
+  //     return fn(acc, this._actors.collection[name], name, index);
+  //   }, acc);
+  // };
 
   map(fn) {
-    return this.actors.$$map.map((name, index) => {
-      return fn(this.actors.collection[name], name, index);
-    });
+    return this._actors.collection.map(fn);
   }
 
-  find(name, notValue) {
-    return this.actors.collection[name] || notValue;
+  find(instance, notValue) {
+    return this._actors.find(instance) || notValue;
   }
 
   addTree(tree) {
-    Object.keys(tree).forEach(name => this.add(tree[name], name));
+    Object.keys(tree).forEach((name) => this.add(tree[name], name));
   }
 
   add(actor, name) {
-    // if(this.actors.collection[name]){
-    // raiseErrorMaybe(new Error(`Child's name [${name}] must be unique in the same Container.`), actor.onError);
-    // }
     !actor.getID() && actor.setID(Context.getID());
-    const instance = actor.getInstanceID(); //TODO: map by component type
-    // const type = actor._actorInternal_.constructor.name;
-    // this.actors.$$typeMap[type] ? this.actors.$$typeMap[type].push(id) : this.actors.$$typeMap[name] = [id];
+    const instance = actor.getInstanceID();
+    
+    this._actors.add(actor);
 
-    this.actors.collection[instance] = actor;
-    this.actors.$$idMap[actor.getID()] = instance;
-    this.actors.$$map.push(instance);
-    this.actors.$$nameMap[name] ? this.actors.$$nameMap[name].push(actor.getID()) : this.actors.$$nameMap[name] = [actor.getID()];
     actor.hook = this._hookFactory;
     actor.componentDidEnter((action, target) => this.dispatch(action, target));
-    return name;
+
+    return instance;
   }
 
   removeChildren(name) {
-    this.actors.$$map.forEach(nm => {
-      if (nm.indexOf(name + "_") === 0) {
-        const actor = this.actors.collection[nm];
-        actor.componentDidLeave();
-        actor.dispose();
-        delete this.actors.collection[nm];
+    this._actors.collection.forEach(nm => {
+      if (nm.getName().indexOf(name + "_") === 0) {
+        this.remove(name);
       }
     });
-    this.actors.$$map = Object.keys(this.actors.collection);
+    // this._actors.collection = Object.keys(this._actors.collection);
   }
 
-  remove(name) {
-    this.removeChildren(name);
-    const actor = this.actors.collection[name];
+  remove(instance) {
+    this.removeChildren(instance);
 
-    if (actor) {
-      delete this.actors.collection[name];
-      this.actors.$$map = Object.keys(this.actors.collection);
+    const index = this._actors.$$idMap[instance];
+
+    if (index >= 0) {
+      const actor = this._actors.collection[index];
+      delete this._actors.$$nameMap[actor.getName()];
+      delete this._actors.$$idMap[actor.getInstanceID()];
+      this._actors.collection.splice(index, 1);
       actor.componentDidLeave();
       actor.dispose();
     }
   }
 
   setState(state) {
-    if (state !== this.state) {
-      this.state = state;
+    if (state !== this._state) {
+      this._state = state;
+      // this.propagateAll(state, oldState);
     }
   }
 
   propagateAll() {
-    this.actors.$$map.map(name => {
-      const actor = this.actors.collection[name];
+    this._actors.collection.map((actor) => {
       actor.onContextChange && actor.onContextChange(this);
     });
   }
 
   getState() {
-    return Object.assign({}, this.state);
+    return Object.assign({}, this._state);
   }
 
   dispatch(action, target) {
     try {
       const reducer = this.getReducer();
-      const state = reducer(this, action, target, this.state || {});
+      const state = reducer(this, action, target, this._state || {});
       this.setState(state);
-    } catch (e) {
+    }
+    catch (e) {
       e.message = `An Error is occurred When action [${action.type}] run on target [${target}]. ${e.message}`;
-      raiseErrorMaybe(e, target && !!this.actors.collection[target] && (e => this.actors.collection[target].onError(e)));
+      raiseErrorMaybe(e, target && !!this._actors.collection[target] && this._actors.collection[target].onError);
     }
   }
 
   dispose() {
-    this.state = null;
-    this.actors = null;
+    this._state = null;
+    this._actors = null;
   }
 
   subcribe(fn) {}
@@ -131,4 +194,11 @@ export default class Context {
     var ID = 1;
     return () => ++ID;
   })();
+  
+  static createActor(ActorClass, name, component){
+    return new ActorClass(component, name, Context.getID());
+  }
+
+  subcribe(fn) {}
+
 };

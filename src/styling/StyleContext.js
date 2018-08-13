@@ -87,12 +87,14 @@ export function createStyleContext(actors, hookMaybe, updateContextTree) {
       : {};
     //creates new context
     context = new Context(
-          context && context.reduce((acc, actor, name) => {acc[name] = actor; return acc;}, {}) || actors,
-          contextUpdater,
-          latestState,
-          hookMaybe
-        );
-        
+      context 
+        && context.reduce((acc, actor, name) => {acc[name] = actor; return acc;}, {}) 
+        || actors,
+      contextUpdater,
+      latestState,
+      hookMaybe
+    );
+
     return context;
   };
 }
